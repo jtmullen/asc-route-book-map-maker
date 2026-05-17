@@ -414,6 +414,12 @@
                 <span class="slider-val" id="thicknessVal">7</span>
             </div>
 
+            <div class="slider-row">
+                <label>Base Width</label>
+                <input type="range" id="baseThicknessSlider" min="1" max="12" value="3" step="1">
+                <span class="slider-val" id="baseThicknessVal">3</span>
+            </div>
+
             <button class="btn btn-primary" style="margin-top:12px;" onclick="zoomToRange()">⌖ Zoom to Range</button>
         </div>
 
@@ -470,9 +476,10 @@ var routeLayer = null;
 var segmentLayer = null;
 var routeLengthMiles = 0;
 
-var municipalities = []; // { name, mile, color, marker, circleLayer }
+var municipalities = [];
 var selectedColor = '#3b82f6';
 var muniClickMode = false;
+var labelOnlyMode = false;
 var pendingMuniClickName = null;
 
 // ── COLORS ──
@@ -505,10 +512,11 @@ document.getElementById('paddingSlider').addEventListener('input', function() {
 });
 document.getElementById('thicknessSlider').addEventListener('input', function() {
     document.getElementById('thicknessVal').textContent = this.value;
-    // Live-update segment if already drawn
-    if (segmentLayer) {
-        segmentLayer.setStyle({ weight: parseInt(this.value) });
-    }
+    if (segmentLayer) segmentLayer.setStyle({ weight: parseInt(this.value) });
+});
+document.getElementById('baseThicknessSlider').addEventListener('input', function() {
+    document.getElementById('baseThicknessVal').textContent = this.value;
+    if (routeLayer) routeLayer.setStyle({ weight: parseInt(this.value) });
 });
 
 // ── FILE LOAD ──
@@ -543,7 +551,7 @@ function loadRoute(geojson) {
     routeLengthMiles = turf.length(routeGeoJSON, {units: 'miles'});
 
     routeLayer = L.geoJSON(geojson, {
-        style: { color: '#3b82f6', weight: 3, opacity: 0.85 }
+        style: { color: '#3b82f6', weight: parseInt(document.getElementById('baseThicknessSlider').value), opacity: 0.85 }
     }).addTo(map);
 
     map.fitBounds(routeLayer.getBounds());
@@ -624,19 +632,50 @@ function toggleMuniClickMode() {
     }
 }
 
-map.on('click', function(e) {
-    if (!muniClickMode) return;
+function toggleLabelOnlyMode() {
+    // Cancel identify mode if active
+    if (muniClickMode) toggleMuniClickMode();
+    labelOnlyMode = !labelOnlyMode;
+    var btn = document.getElementById('labelOnlyBtn');
+    if (labelOnlyMode) {
+        btn.textContent = '✕ Cancel Label Mode';
+        btn.style.background = '#e74c3c';
+        map.getContainer().style.cursor = 'crosshair';
+        var name = document.getElementById('muniName').value.trim();
+        setStatus(name ? 'Click map to place "' + name + '" label.' : 'Enter a name, then click map.', 'warn');
+    } else {
+        btn.textContent = '✏️ Place Label Only';
+        btn.style.background = '#4b5563';
+        map.getContainer().style.cursor = '';
+        setStatus('Label mode off.', '');
+    }
+}
 
+map.on('click', function(e) {
+    if (labelOnlyMode) {
+        var name = document.getElementById('muniName').value.trim();
+        if (!name) { setStatus('Enter a name first, then click.', 'warn'); return; }
+        toggleLabelOnlyMode();
+        var labelMarker = L.marker([e.latlng.lat, e.latlng.lng], {
+            icon: makeLabelIcon(name, selectedColor, 13),
+            draggable: true,
+            zIndexOffset: 500
+        }).addTo(map);
+        var muni = { name: name, color: selectedColor, fontSize: 13, layer: null, labelMarker: labelMarker };
+        municipalities.push(muni);
+        document.getElementById('muniName').value = '';
+        renderMuniList();
+        setStatus('Label placed — drag to reposition.', 'ok');
+        return;
+    }
+
+    if (!muniClickMode) return;
     var lat = e.latlng.lat, lng = e.latlng.lng;
     var nameHint = document.getElementById('muniName').value.trim();
-
     toggleMuniClickMode();
-
     setStatus('Looking up location…', 'warn');
-    // polygon_geojson=1 returns the boundary shape directly — no Overpass needed
     var url = 'https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng +
               '&zoom=10&addressdetails=1&polygon_geojson=1';
-
     fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'ASC-RouteBookTool/1.0' } })
         .then(function(r) { return r.json(); })
         .then(function(data) {
