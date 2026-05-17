@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ASC Route Book Map Tool</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="origin">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/togeojson/0.16.0/togeojson.min.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
+        :root {
+            --bg: #1a1d23;
+            --panel: #22262f;
+            --border: #2e3340;
+            --accent: #f0a500;
+            --accent2: #3b82f6;
+            --red: #e74c3c;
+            --green: #2ecc71;
+            --text: #e8eaf0;
+            --muted: #7a8090;
+            --mono: 'DM Mono', monospace;
+            --head: 'Barlow Condensed', sans-serif;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: var(--head);
+            background: var(--bg);
+            overflow: hidden;
+            color: var(--text);
+        }
+
+        #map {
+            position: absolute; top: 0; bottom: 0; width: 100%;
+            z-index: 1; cursor: crosshair;
+        }
+
+        /* ── PANEL ── */
+        #panel {
+            position: absolute; top: 10px; right: 10px; z-index: 1000;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            width: 310px;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: var(--accent);
+            color: #111;
+            padding: 11px 15px;
+            font-family: var(--head);
+            font-weight: 700;
+            font-size: 1.05rem;
+            letter-spacing: 0.04em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-header .sub {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            color: rgba(0,0,0,0.55);
+            text-transform: uppercase;
+        }
+
+        .panel-body { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+
+        /* ── SECTIONS ── */
+        .section {
+            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            padding: 12px;
+        }
+
+        .section-title {
+            font-size: 0.68rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--muted);
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        /* ── RANGE INPUTS ── */
+        .range-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .range-field label {
+            display: block;
+            font-size: 0.68rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+
+        .range-field input {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 0.95rem;
+            padding: 6px 9px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        .range-field input:focus { border-color: var(--accent); }
+
+        .range-info {
+            margin-top: 8px;
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            color: var(--muted);
+            min-height: 1.2em;
+        }
+
+        .range-info .val { color: var(--accent); font-weight: 500; }
+
+        /* Padding slider */
+        .slider-row {
+            display: flex; align-items: center; gap: 10px; margin-top: 10px;
+        }
+
+        .slider-row label {
+            font-size: 0.68rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        input[type=range] {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            outline: none;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; height: 14px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .slider-val {
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            color: var(--accent);
+            min-width: 28px;
+            text-align: right;
+        }
+
+        /* ── BUTTONS ── */
+        .btn {
+            width: 100%; padding: 9px;
+            border: none; border-radius: 6px;
+            font-family: var(--head);
+            font-weight: 700;
+            font-size: 0.95rem;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            transition: filter 0.15s, transform 0.1s;
+        }
+
+        .btn:hover { filter: brightness(1.1); }
+        .btn:active { transform: scale(0.98); }
+
+        .btn-primary { background: var(--accent); color: #111; }
+        .btn-secondary { background: var(--accent2); color: white; margin-top: 6px; }
+        .btn-danger { background: var(--red); color: white; font-size: 0.8rem; padding: 6px; }
+
+        /* ── MUNICIPALITY LIST ── */
+        .muni-list {
+            max-height: 160px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 2px;
+        }
+
+        .muni-list::-webkit-scrollbar { width: 4px; }
+        .muni-list::-webkit-scrollbar-track { background: transparent; }
+        .muni-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+        .muni-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 8px;
+            border-radius: 5px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: border-color 0.12s;
+        }
+
+        .muni-item:hover { border-color: var(--accent2); }
+        .muni-item.active { border-color: var(--accent2); background: rgba(59,130,246,0.1); }
+
+        .muni-color-swatch {
+            width: 12px; height: 12px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .muni-name {
+            flex: 1;
+            font-size: 0.82rem;
+            font-weight: 600;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        .muni-name-input {
+            flex: 1;
+            font-family: var(--head);
+            font-size: 0.82rem;
+            font-weight: 600;
+            background: transparent;
+            border: none;
+            border-bottom: 1px dashed transparent;
+            color: var(--text);
+            outline: none;
+            min-width: 0;
+            cursor: text;
+            transition: border-color 0.15s;
+        }
+        .muni-name-input:hover { border-bottom-color: var(--muted); }
+        .muni-name-input:focus { border-bottom-color: var(--accent); background: rgba(255,255,255,0.04); }
+
+        .muni-mile {
+            font-family: var(--mono);
+            font-size: 0.72rem;
+            color: var(--muted);
+            flex-shrink: 0;
+        }
+
+        .muni-delete {
+            background: none;
+            border: none;
+            color: var(--muted);
+            font-size: 1rem;
+            cursor: pointer;
+            padding: 0 2px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .muni-delete:hover { color: var(--red); }
+
+        /* Add muni input row */
+        .add-muni-row {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .add-muni-row input {
+            flex: 1;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            color: var(--text);
+            font-family: var(--head);
+            font-size: 0.85rem;
+            padding: 6px 9px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+
+        .add-muni-row input:focus { border-color: var(--accent2); }
+
+        .add-muni-row input.mile-in {
+            font-family: var(--mono);
+            width: 75px;
+            flex: none;
+        }
+
+        .add-muni-btn {
+            background: var(--accent2);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            font-size: 1.1rem;
+            padding: 0 10px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: filter 0.15s;
+        }
+
+        .add-muni-btn:hover { filter: brightness(1.15); }
+
+        /* ── COLOR PICKER PALETTE ── */
+        .color-palette {
+            display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px;
+        }
+
+        .color-swatch {
+            width: 20px; height: 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.1s, border-color 0.1s;
+        }
+        .color-swatch:hover { transform: scale(1.2); }
+        .color-swatch.selected { border-color: white; }
+
+        /* ── FILE BUTTON ── */
+        .file-label {
+            display: block;
+            background: #2e3340;
+            color: var(--text);
+            text-align: center;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            border: 1px dashed var(--border);
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .file-label:hover { border-color: var(--accent); background: #353a45; }
+        input[type="file"] { display: none; }
+
+        /* ── STATUS BAR ── */
+        .status {
+            font-family: var(--mono);
+            font-size: 0.72rem;
+            color: var(--muted);
+            text-align: center;
+            padding: 6px 14px 10px;
+            border-top: 1px solid var(--border);
+        }
+
+        .status.ok { color: var(--green); }
+        .status.warn { color: var(--accent); }
+
+        /* ── SEGMENT HIGHLIGHT on map ── */
+        .muni-label-tooltip {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
+    </style>
+</head>
+<body>
+
+<div id="panel">
+    <div class="panel-header">
+        <div>
+            <div>ASC 2026</div>
+            <div class="sub">Route Book Map Tool</div>
+        </div>
+    </div>
+
+    <div class="panel-body">
+
+        <!-- FILE LOAD -->
+        <label class="file-label">
+            📂 Load GPX File
+            <input type="file" id="fileInput" accept=".gpx">
+        </label>
+
+        <!-- STEP RANGE -->
+        <div class="section">
+            <div class="section-title">Step Range</div>
+            <div class="range-grid">
+                <div class="range-field">
+                    <label>From (mi)</label>
+                    <input type="number" id="rangeStart" placeholder="0.0" step="0.1" min="0">
+                </div>
+                <div class="range-field">
+                    <label>To (mi)</label>
+                    <input type="number" id="rangeEnd" placeholder="10.0" step="0.1" min="0">
+                </div>
+            </div>
+            <div class="range-info" id="rangeInfo">Load a GPX to get started.</div>
+
+            <div class="slider-row">
+                <label>Map Padding</label>
+                <input type="range" id="paddingSlider" min="20" max="200" value="80" step="5">
+                <span class="slider-val" id="paddingVal">80</span>
+            </div>
+
+            <div class="slider-row">
+                <label>Line Width</label>
+                <input type="range" id="thicknessSlider" min="2" max="20" value="7" step="1">
+                <span class="slider-val" id="thicknessVal">7</span>
+            </div>
+
+            <button class="btn btn-primary" style="margin-top:12px;" onclick="zoomToRange()">⌖ Zoom to Range</button>
+        </div>
+
+        <!-- MUNICIPALITIES -->
+        <div class="section">
+            <div class="section-title">Municipality Highlights</div>
+
+            <!-- Color palette -->
+            <div class="color-palette" id="colorPalette"></div>
+
+            <!-- Add row -->
+            <div class="add-muni-row">
+                <input type="text" id="muniName" placeholder="City / Town name">
+                <button class="add-muni-btn" onclick="addMuniFromInputs()" title="Search & Add">+</button>
+            </div>
+            <div style="font-size:0.7rem; color:var(--muted); margin-top:4px;">Type a name and press + to search OSM, or click the map to identify a place.</div>
+
+            <!-- List -->
+            <div class="muni-list" id="muniList"></div>
+
+            <button class="btn btn-secondary" onclick="toggleMuniClickMode()" id="muniClickBtn" style="margin-top:10px;">📍 Click Map to Identify</button>
+        </div>
+
+    </div>
+
+    <div class="status" id="status">No route loaded.</div>
+</div>
+
+<div id="map"></div>
+
+<script>
+// ── MAP SETUP ──
+var osmLayer  = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxNativeZoom: 19, maxZoom: 22, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' });
+var satLayer  = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxNativeZoom: 18, maxZoom: 22, attribution: '© Esri' });
+var topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxNativeZoom: 17, maxZoom: 22, attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a>' });
+
+var map = L.map('map', {
+    center: [39.8283, -98.5795],
+    zoom: 4,
+    maxZoom: 22,
+    layers: [osmLayer]
+});
+
+L.control.layers(
+    { "Street": osmLayer, "Satellite": satLayer, "Topo": topoLayer },
+    null,
+    { position: 'bottomright' }
+).addTo(map);
+
+// ── STATE ──
+var routeGeoJSON = null;
+var routeLayer = null;
+var segmentLayer = null;
+var routeLengthMiles = 0;
+
+var municipalities = []; // { name, mile, color, marker, circleLayer }
+var selectedColor = '#3b82f6';
+var muniClickMode = false;
+var pendingMuniClickName = null;
+
+// ── COLORS ──
+var PALETTE = [
+    '#3b82f6','#f0a500','#e74c3c','#2ecc71','#a855f7',
+    '#ec4899','#14b8a6','#f97316','#facc15','#ffffff'
+];
+
+function initPalette() {
+    var c = document.getElementById('colorPalette');
+    c.innerHTML = '';
+    PALETTE.forEach(function(col) {
+        var sw = document.createElement('div');
+        sw.className = 'color-swatch' + (col === selectedColor ? ' selected' : '');
+        sw.style.background = col;
+        sw.title = col;
+        sw.onclick = function() {
+            selectedColor = col;
+            document.querySelectorAll('.color-swatch').forEach(function(s) { s.classList.remove('selected'); });
+            sw.classList.add('selected');
+        };
+        c.appendChild(sw);
+    });
+}
+initPalette();
+
+// ── PADDING SLIDER ──
+document.getElementById('paddingSlider').addEventListener('input', function() {
+    document.getElementById('paddingVal').textContent = this.value;
+});
+document.getElementById('thicknessSlider').addEventListener('input', function() {
+    document.getElementById('thicknessVal').textContent = this.value;
+    // Live-update segment if already drawn
+    if (segmentLayer) {
+        segmentLayer.setStyle({ weight: parseInt(this.value) });
+    }
+});
+
+// ── FILE LOAD ──
+document.getElementById('fileInput').addEventListener('change', function() { handleFiles(this.files); });
+
+['dragenter','dragover','dragleave','drop'].forEach(function(ev) {
+    document.body.addEventListener(ev, function(e) { e.preventDefault(); e.stopPropagation(); });
+});
+document.body.addEventListener('drop', function(e) { handleFiles(e.dataTransfer.files); });
+
+function handleFiles(files) {
+    if (!files.length) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            var parser = new DOMParser();
+            var gpxDoc = parser.parseFromString(e.target.result, 'text/xml');
+            var geojson = toGeoJSON.gpx(gpxDoc);
+            loadRoute(geojson);
+        } catch(err) { setStatus('Error parsing GPX file.', 'warn'); }
+    };
+    reader.readAsText(files[0]);
+}
+
+function loadRoute(geojson) {
+    if (routeLayer) map.removeLayer(routeLayer);
+    if (segmentLayer) { map.removeLayer(segmentLayer); segmentLayer = null; }
+
+    routeGeoJSON = geojson.features.find(function(f) { return f.geometry.type === 'LineString'; });
+    if (!routeGeoJSON) { setStatus('No LineString track found in GPX.', 'warn'); return; }
+
+    routeLengthMiles = turf.length(routeGeoJSON, {units: 'miles'});
+
+    routeLayer = L.geoJSON(geojson, {
+        style: { color: '#3b82f6', weight: 3, opacity: 0.85 }
+    }).addTo(map);
+
+    map.fitBounds(routeLayer.getBounds());
+
+    document.getElementById('rangeStart').placeholder = '0.0';
+    document.getElementById('rangeEnd').placeholder = routeLengthMiles.toFixed(1);
+    document.getElementById('rangeInfo').innerHTML = 'Route: <span class="val">' + routeLengthMiles.toFixed(2) + ' mi</span> total';
+    setStatus('Route loaded — ' + routeLengthMiles.toFixed(2) + ' mi.', 'ok');
+}
+
+// ── RANGE → UPDATE INFO ──
+['rangeStart','rangeEnd'].forEach(function(id) {
+    document.getElementById(id).addEventListener('input', updateRangeInfo);
+});
+
+function updateRangeInfo() {
+    var s = parseFloat(document.getElementById('rangeStart').value);
+    var e = parseFloat(document.getElementById('rangeEnd').value);
+    if (isNaN(s) || isNaN(e) || !routeGeoJSON) return;
+    var len = Math.abs(e - s);
+    document.getElementById('rangeInfo').innerHTML =
+        '<span class="val">' + s.toFixed(2) + '</span> → <span class="val">' + e.toFixed(2) + '</span>  |  <span class="val">' + len.toFixed(2) + ' mi</span>';
+}
+
+// ── ZOOM TO RANGE ──
+function zoomToRange() {
+    if (!routeGeoJSON) { setStatus('Load a GPX first.', 'warn'); return; }
+
+    var s = parseFloat(document.getElementById('rangeStart').value);
+    var e = parseFloat(document.getElementById('rangeEnd').value);
+
+    if (isNaN(s) || isNaN(e)) { setStatus('Enter valid mile values.', 'warn'); return; }
+    if (s > e) { var tmp = s; s = e; e = tmp; }
+    s = Math.max(0, s);
+    e = Math.min(routeLengthMiles, e);
+
+    // Extract sub-segment using turf.lineSliceAlong
+    var segment;
+    try {
+        segment = turf.lineSliceAlong(routeGeoJSON, s, e, {units: 'miles'});
+    } catch(err) {
+        setStatus('Could not slice route segment.', 'warn');
+        return;
+    }
+
+    // Draw highlighted segment — blue, thickness from slider, under route
+    if (segmentLayer) map.removeLayer(segmentLayer);
+    var weight = parseInt(document.getElementById('thicknessSlider').value);
+    segmentLayer = L.geoJSON(segment, {
+        style: { color: '#3b82f6', weight: weight, opacity: 0.95 }
+    });
+    segmentLayer.addTo(map);
+    if (routeLayer) routeLayer.bringToFront();
+
+    // Fit bounds with padding; cap zoom so short segments don't over-zoom
+    var pad = parseInt(document.getElementById('paddingSlider').value);
+    var bounds = segmentLayer.getBounds();
+    map.fitBounds(bounds, { padding: [pad, pad], maxZoom: 16 });
+
+    setStatus('Showing ' + s.toFixed(2) + '–' + e.toFixed(2) + ' mi. Padding: ' + pad + 'px.', 'ok');
+}
+
+// ── MUNICIPALITIES ──
+
+function toggleMuniClickMode() {
+    muniClickMode = !muniClickMode;
+    var btn = document.getElementById('muniClickBtn');
+    if (muniClickMode) {
+        btn.textContent = '✕ Cancel Click Mode';
+        btn.style.background = '#e74c3c';
+        map.getContainer().style.cursor = 'crosshair';
+        setStatus('Click a municipality area on the map.', 'warn');
+    } else {
+        btn.textContent = '📍 Click Map to Identify';
+        btn.style.background = '';
+        map.getContainer().style.cursor = '';
+        setStatus('Click mode off.', '');
+    }
+}
+
+map.on('click', function(e) {
+    if (!muniClickMode) return;
+
+    var lat = e.latlng.lat, lng = e.latlng.lng;
+    var nameHint = document.getElementById('muniName').value.trim();
+
+    toggleMuniClickMode();
+
+    setStatus('Looking up location…', 'warn');
+    // polygon_geojson=1 returns the boundary shape directly — no Overpass needed
+    var url = 'https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng +
+              '&zoom=10&addressdetails=1&polygon_geojson=1';
+
+    fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'ASC-RouteBookTool/1.0' } })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var addr = data.address || {};
+            var autoName = nameHint ||
+                addr.city || addr.town || addr.village || addr.hamlet ||
+                addr.county || (data.display_name || '').split(',')[0];
+            if (!autoName) { setStatus('Could not determine place name.', 'warn'); return; }
+            drawMuniBoundary(data, autoName, selectedColor);
+        })
+        .catch(function() { setStatus('Nominatim reverse lookup failed.', 'warn'); });
+});
+
+function addMuniFromInputs() {
+    var name = document.getElementById('muniName').value.trim();
+    if (!name) { setStatus('Enter a city/town name.', 'warn'); return; }
+
+    setStatus('Searching for "' + name + '"…', 'warn');
+
+    // polygon_geojson=1 gives us the shape right in the search result
+    var url = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(name) +
+              '&featuretype=settlement&limit=5&addressdetails=1&polygon_geojson=1';
+
+    fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'ASC-RouteBookTool/1.0' } })
+        .then(function(r) { return r.json(); })
+        .then(function(results) {
+            if (!results.length) { setStatus('No results for "' + name + '".', 'warn'); return; }
+
+            // Pick closest result to route, else first
+            var best = results[0];
+            if (routeGeoJSON && results.length > 1) {
+                var minDist = Infinity;
+                results.forEach(function(r) {
+                    var pt = turf.point([parseFloat(r.lon), parseFloat(r.lat)]);
+                    var snapped = turf.nearestPointOnLine(routeGeoJSON, pt, {units: 'miles'});
+                    if (snapped.properties.dist < minDist) { minDist = snapped.properties.dist; best = r; }
+                });
+            }
+            drawMuniBoundary(best, name, selectedColor);
+        })
+        .catch(function() { setStatus('Search failed.', 'warn'); });
+
+    document.getElementById('muniName').value = '';
+}
+
+// ── Draw boundary from a Nominatim result that has geojson ──
+function drawMuniBoundary(data, name, color) {
+    var geojson = data.geojson;
+    if (!geojson || (geojson.type !== 'Polygon' && geojson.type !== 'MultiPolygon')) {
+        setStatus('"' + name + '" has no polygon boundary in OSM.', 'warn');
+        return;
+    }
+
+    var feature = { type: 'Feature', geometry: geojson, properties: {} };
+
+    var layer = L.geoJSON(feature, {
+        style: {
+            color: color,
+            weight: 2.5,
+            opacity: 0.9,
+            fillColor: color,
+            fillOpacity: 0.18
+        }
+    }).addTo(map);
+
+    var center = layer.getBounds().getCenter();
+
+    // Draggable label marker
+    var labelIcon = makeLabelIcon(name, color, 13);
+    var labelMarker = L.marker(center, {
+        icon: labelIcon,
+        draggable: true,
+        zIndexOffset: 500
+    }).addTo(map);
+
+    var muni = { name: name, color: color, fontSize: 13, layer: layer, labelMarker: labelMarker };
+    municipalities.push(muni);
+    renderMuniList();
+    setStatus('Added: ' + name + ' — drag label to reposition.', 'ok');
+}
+
+function makeLabelIcon(name, color, fontSize) {
+    fontSize = fontSize || 13;
+    return L.divIcon({
+        className: '',
+        html: '<div style="display:inline-block;background:' + color + ';color:#111;font-family:Barlow Condensed,sans-serif;font-weight:700;font-size:' + fontSize + 'px;padding:3px 9px;border-radius:3px;letter-spacing:0.04em;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.45);cursor:grab;transform:translate(-50%,-50%);">' + name + '</div>',
+        iconSize: [0, 0],
+        iconAnchor: [0, 0]
+    });
+}
+
+function removeMuni(idx) {
+    var m = municipalities[idx];
+    if (m.layer) map.removeLayer(m.layer);
+    if (m.labelMarker) map.removeLayer(m.labelMarker);
+    municipalities.splice(idx, 1);
+    renderMuniList();
+}
+
+function renderMuniList() {
+    var list = document.getElementById('muniList');
+    list.innerHTML = '';
+    if (!municipalities.length) {
+        list.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;text-align:center;padding:8px;">No municipalities added.</div>';
+        return;
+    }
+
+    municipalities.forEach(function(m, i) {
+        var item = document.createElement('div');
+        item.className = 'muni-item';
+
+        var swatch = document.createElement('div');
+        swatch.className = 'muni-color-swatch';
+        swatch.style.background = m.color;
+
+        var nameEl = document.createElement('input');
+        nameEl.className = 'muni-name-input';
+        nameEl.type = 'text';
+        nameEl.value = m.name;
+        nameEl.title = 'Click to edit label';
+        nameEl.onclick = function(e) { e.stopPropagation(); };
+        nameEl.onchange = (function(muni) {
+            return function() {
+                var newName = this.value.trim();
+                if (!newName) { this.value = muni.name; return; }
+                muni.name = newName;
+                // Rebuild the map label icon with the new name
+                var newIcon = makeLabelIcon(newName, muni.color, muni.fontSize);
+                muni.labelMarker.setIcon(newIcon);
+            };
+        })(m);
+
+        var sizeDown = document.createElement('button');
+        sizeDown.className = 'muni-delete';
+        sizeDown.textContent = '−';
+        sizeDown.title = 'Smaller label';
+        sizeDown.onclick = (function(muni) {
+            return function(e) {
+                e.stopPropagation();
+                muni.fontSize = Math.max(7, muni.fontSize - 1);
+                muni.labelMarker.setIcon(makeLabelIcon(muni.name, muni.color, muni.fontSize));
+            };
+        })(m);
+
+        var sizeUp = document.createElement('button');
+        sizeUp.className = 'muni-delete';
+        sizeUp.textContent = '+';
+        sizeUp.title = 'Larger label';
+        sizeUp.onclick = (function(muni) {
+            return function(e) {
+                e.stopPropagation();
+                muni.fontSize = Math.min(48, muni.fontSize + 1);
+                muni.labelMarker.setIcon(makeLabelIcon(muni.name, muni.color, muni.fontSize));
+            };
+        })(m);
+
+        var delBtn = document.createElement('button');
+        delBtn.className = 'muni-delete';
+        delBtn.textContent = '×';
+        delBtn.title = 'Remove';
+        delBtn.onclick = function(e) { e.stopPropagation(); removeMuni(i); };
+
+        // Click to zoom to boundary
+        item.onclick = function() {
+            if (m.layer) map.fitBounds(m.layer.getBounds(), { padding: [40, 40] });
+        };
+        item.appendChild(swatch);
+        item.appendChild(nameEl);
+        item.appendChild(sizeDown);
+        item.appendChild(sizeUp);
+        item.appendChild(delBtn);
+        list.appendChild(item);
+    });
+}
+
+// ── STATUS ──
+function setStatus(msg, type) {
+    var el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = 'status' + (type ? ' ' + type : '');
+}
+
+// Allow Enter key in name/mile inputs
+document.getElementById('muniName').addEventListener('keypress', function(e) { if (e.key === 'Enter') addMuniFromInputs(); });
+document.getElementById('rangeStart').addEventListener('keypress', function(e) { if (e.key === 'Enter') document.getElementById('rangeEnd').focus(); });
+document.getElementById('rangeEnd').addEventListener('keypress', function(e) { if (e.key === 'Enter') zoomToRange(); });
+
+renderMuniList();
+</script>
+</body>
+</html>
