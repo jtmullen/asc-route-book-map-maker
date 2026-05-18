@@ -21,7 +21,7 @@
             --panel: #22262f;
             --border: #2e3340;
             --accent: #f0a500;
-            --accent2: #3b82f6;
+            --accent2: #305CDE;
             --red: #e74c3c;
             --green: #2ecc71;
             --text: #e8eaf0;
@@ -30,8 +30,9 @@
             --head: 'Barlow Condensed', sans-serif;
         }
 
-        body {
+        html, body {
             margin: 0; padding: 0;
+            height: 100%;
             font-family: var(--head);
             background: var(--bg);
             overflow: hidden;
@@ -39,7 +40,8 @@
         }
 
         #map {
-            position: absolute; top: 0; bottom: 0; width: 100%;
+            position: absolute; top: 0; bottom: 0; left: 0; right: 0;
+            width: 100%; height: 100%;
             z-index: 1; cursor: crosshair;
         }
 
@@ -382,10 +384,16 @@
     <div class="panel-body">
 
         <!-- FILE LOAD -->
-        <label class="file-label">
-            📂 Load GPX File
-            <input type="file" id="fileInput" accept=".gpx">
-        </label>
+        <div class="section" style="padding:10px 12px;">
+            <div class="section-title">Route File</div>
+            <select id="gpxSelect" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--head);font-size:0.9rem;padding:6px 8px;outline:none;margin-bottom:8px;">
+                <option value="">— Select a route —</option>
+            </select>
+            <label class="file-label" style="font-size:0.78rem;padding:6px;">
+                📂 or upload a GPX file
+                <input type="file" id="fileInput" accept=".gpx">
+            </label>
+        </div>
 
         <!-- STEP RANGE -->
         <div class="section">
@@ -522,6 +530,37 @@ document.getElementById('baseThicknessSlider').addEventListener('input', functio
 // ── FILE LOAD ──
 document.getElementById('fileInput').addEventListener('change', function() { handleFiles(this.files); });
 
+// ── LOAD GPX MANIFEST ──
+fetch('gpx-manifest.json')
+    .then(function(r) { return r.json(); })
+    .then(function(files) {
+        var sel = document.getElementById('gpxSelect');
+        files.forEach(function(f) {
+            var opt = document.createElement('option');
+            opt.value = f.path;
+            opt.textContent = f.name;
+            sel.appendChild(opt);
+        });
+    })
+    .catch(function() {
+        // Manifest not found — dropdown stays empty, upload still works
+    });
+
+document.getElementById('gpxSelect').addEventListener('change', function() {
+    var path = this.value;
+    if (!path) return;
+    setStatus('Loading ' + path + '…', 'warn');
+    fetch(path)
+        .then(function(r) { return r.text(); })
+        .then(function(text) {
+            var parser = new DOMParser();
+            var gpxDoc = parser.parseFromString(text, 'text/xml');
+            var geojson = toGeoJSON.gpx(gpxDoc);
+            loadRoute(geojson);
+        })
+        .catch(function() { setStatus('Failed to load GPX file.', 'warn'); });
+});
+
 ['dragenter','dragover','dragleave','drop'].forEach(function(ev) {
     document.body.addEventListener(ev, function(e) { e.preventDefault(); e.stopPropagation(); });
 });
@@ -551,7 +590,7 @@ function loadRoute(geojson) {
     routeLengthMiles = turf.length(routeGeoJSON, {units: 'miles'});
 
     routeLayer = L.geoJSON(geojson, {
-        style: { color: '#3b82f6', weight: parseInt(document.getElementById('baseThicknessSlider').value), opacity: 0.85 }
+        style: { color: '#305CDE', weight: parseInt(document.getElementById('baseThicknessSlider').value), opacity: 0.85 }
     }).addTo(map);
 
     map.fitBounds(routeLayer.getBounds());
@@ -601,7 +640,7 @@ function zoomToRange() {
     if (segmentLayer) map.removeLayer(segmentLayer);
     var weight = parseInt(document.getElementById('thicknessSlider').value);
     segmentLayer = L.geoJSON(segment, {
-        style: { color: '#3b82f6', weight: weight, opacity: 0.95 }
+        style: { color: '#305CDE', weight: weight, opacity: 0.95 }
     });
     segmentLayer.addTo(map);
     if (routeLayer) routeLayer.bringToFront();

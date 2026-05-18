@@ -1,0 +1,9 @@
+[
+  { "name": "Segment 1A", "path": "gpx/Seg1A.gpx" },
+  { "name": "Loop AL", "path": "gpx/LoopA.gpx" },
+  { "name": "Segment 1B", "path": "gpx/Seg1B.gpx" },
+  { "name": "Loop BL", "path": "gpx/LoopB.gpx" },
+  { "name": "Loop BX", "path": "gpx/LoopBX.gpx" },
+  { "name": "Segment 1C", "path": "gpx/Seg1C.gpx" },
+  { "name": "Loop CL", "path": "gpx/LoopC.gpx" },
+]
