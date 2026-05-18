@@ -5,5 +5,5 @@
   { "name": "Loop BL", "path": "gpx/LoopB.gpx" },
   { "name": "Loop BX", "path": "gpx/LoopBX.gpx" },
   { "name": "Segment 1C", "path": "gpx/Seg1C.gpx" },
-  { "name": "Loop CL", "path": "gpx/LoopC.gpx" },
+  { "name": "Loop CL", "path": "gpx/LoopC.gpx" }
 ]
