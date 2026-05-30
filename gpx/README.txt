@@ -1,0 +1,1 @@
+These GPX files are provided for reference. In the event of a discrepancy with other source, the Official Route Book always takes precedence as the source of truth. If you notice any errors in other sources, please notify HQ and we will attempt to correct. 
