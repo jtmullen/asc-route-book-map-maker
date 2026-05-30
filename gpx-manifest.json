@@ -7,8 +7,15 @@
   { "name": "Segment 1C", "path": "gpx/Seg1C.gpx" },
   { "name": "Loop CL", "path": "gpx/LoopC.gpx" },
   { "name": "Segment 2D", "path": "gpx/Seg2D.gpx" },
+  { "name": "Loop DL", "path": "gpx/LoopD.gpx" },
   { "name": "Segment 2E", "path": "gpx/Seg2E.gpx" },
+  { "name": "Loop EL", "path": "gpx/LoopE.gpx" },
+  { "name": "Loop EX", "path": "gpx/LoopEX.gpx" },
   { "name": "Segment 3F", "path": "gpx/Seg3F.gpx" },
+  { "name": "Loop FL", "path": "gpx/LoopF.gpx" },
+  { "name": "Loop FX", "path": "gpx/LoopFX.gpx" },
   { "name": "Segment 3G", "path": "gpx/Seg3G.gpx" },
+  { "name": "Loop GL", "path": "gpx/LoopG.gpx" },
+  { "name": "Loop GX", "path": "gpx/LoopGX.gpx" },
   { "name": "Segment 4H", "path": "gpx/Seg4H.gpx" }
 ]
